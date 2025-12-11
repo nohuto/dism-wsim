@@ -235,5 +235,5 @@ Dismount-WindowsImage -Path "$home\Desktop\Mount" -Save
 ```
 
 
-> https://github.com/5Noxi/windows-powershell-docs/blob/main/docset/winserver2025-ps/Dism/Dism.md
+> https://github.com/nohuto/windows-powershell-docs/blob/main/docset/winserver2025-ps/Dism/Dism.md
 > https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/oscdimg-command-line-options?view=windows-11
