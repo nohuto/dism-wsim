@@ -5,7 +5,7 @@ Guide on how to create your own customized and automated Windows installation.
 ## Preperation
 
 Installing WSIM:
-```ps
+```powershell
 winget install Microsoft.WindowsADK
 ```
 
@@ -45,7 +45,7 @@ C:\
     │
     └── Settings
 ```
-```ps
+```powershell
 # Scoop.ps1
 
 cscript //nologo "$env:windir\system32\slmgr.vbs" /ipk XXXXX-XXXXX-XXXXX-XXXXX-XXXXX
@@ -57,7 +57,7 @@ cmd /c start /wait "C:\Installation\Settings\vcredist86.exe" /passive /norestart
 iwr get.scoop.sh -OutFile "$env:temp\Scoop.ps1"
 powershell -File "$env:temp\Scoop.ps1" -RunAsAdmin -Wait
 ```
-```ps
+```powershell
 # Winget.ps1 - Software Installation Examples
 scoop install winget
 
@@ -75,24 +75,8 @@ winget install OBSProject.OBSStudio
 winget install qBittorrent.qBittorrent
 winget install Microsoft.WindowsADK
 winget install Microsoft.VisualStudioCode
-winget install Microsoft.WindowsTerminal
+#winget install Microsoft.WindowsTerminal
 winget install Klocman.BulkCrapUninstaller
-Invoke-Expression "& { $(Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/SpotX-Official/spotx-official.github.io/main/run.ps1') } -v 1.2.13.661.ga588f749-4064 -confirm_spoti_recomended_over -block_update_on -podcasts_off -adsections_off"
-
-$dir = "$env:localappdata\Noverse"
-$dest = "$env:localappdata\Noverse\NVFetch.ps1"
-if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-Copy-Item "C:\Installation\Settings\NVFetch.ps1" -Destination $dest -Force
-if (!(Test-Path $profile)) { New-Item -ItemType File -Path $profile -Force | Out-Null }
-Add-Content $profile -Value "`nfunction nvfetch { & `"$dest`" @args }"
-. $profile
-
-$destblur = "C:\Program Files\ExplorerBlur"
-$zip  = "$env:temp\ExplorerBlur.zip"
-Invoke-WebRequest "https://github.com/Maplespe/ExplorerBlurMica/releases/download/2.0.1/Release_x64.zip" -OutFile $zip
-if (!(Test-Path $destblur)) { New-Item -ItemType Directory -Path $destblur -Force | Out-Null }
-& 7z x $zip "-o$destblur" -y
-Start-Process "cmd.exe" "/c `"$destblur\Release\register.cmd`"" -Verb RunAs -Wait
 ```
 
 ## Personalized `autounattend.xml` Creation
@@ -115,50 +99,57 @@ Microsoft-Windows-International-Core-WinPE
 ## Modifying the ISO
 
 Extracting the `.iso`:
-```ps
+```powershell
 & 7z x "$home\Desktop\Stock.iso" -o"$home\Desktop\Stock" -y
 ```
 Removing indexes (only leaving `Windows 11 IoT Enterprise LTSC`:
-```ps
+```powershell
 $wimpath = "$home\Desktop\Stock\sources\install.wim"
 # Examples
-$remindex = @(
-    #24H2
-    "Windows 11 Enterprise LTSC",
-    "Windows 11 IoT Enterprise Subscription LTSC",
-    #25H2
-    "Windows 11 Enterprise",
-    "Windows 11 IoT Enterprise Subscription"
+$removeNames = @(
+  "Windows 11 Home",
+  "Windows 11 Home N",
+  "Windows 11 Home Single Language",
+  "Windows 11 Education",
+  "Windows 11 Education N",
+  "Windows 11 Pro N",
+  #"Windows 11 Pro",
+  "Windows 11 Pro Education",
+  "Windows 11 Pro Education N",
+  "Windows 11 Pro for Workstations",
+  "Windows 11 Pro N for Workstations",
+
+  # LTSC IoT Enterprise 2024
+  "Windows 11 IoT Enterprise Subscription LTSC",
+  "Windows 11 Enterprise LTSC"
 )
 
-$images = Get-WindowsImage -ImagePath $wimpath
-foreach ($name in $remindex) {
-    if ($images.name -contains $name) {
-        Remove-WindowsImage -ImagePath $wimpath -Name $name
-    }
-}
+$imgs = Get-WindowsImage -ImagePath $wimpath
+$removeIdx = $imgs | ? { $removeNames -contains $_.ImageName } | % ImageIndex | Sort-Object -Descending
+
+$removeIdx | % { Remove-WindowsImage -ImagePath $wimpath -Index $_ }
 ```
 Creating the mount folder (`Index 1 = Windows 11 IoT Enterprise LTSC`):
-```ps
+```powershell
 $mountpath = "$home\Desktop\Mount"
 if (!(Test-Path $mountpath)) { New-Item -ItemType Directory -Path $mountpath -Force | Out-Null}
 Mount-WindowsImage -ImagePath "$home\Desktop\Stock\sources\install.wim" -Index 1 -Path "$home\Desktop\Mount"
 ```
 Removing Edge (optional):
-```ps
+```powershell
 Remove-Item "$mountpath\Program Files (x86)\Microsoft\Edge" -Recurse -Force
 Remove-Item "$mountpath\Program Files (x86)\Microsoft\EdgeCore" -Recurse -Force
 Remove-Item "$mountpath\Program Files (x86)\Microsoft\EdgeUpdate" -Recurse -Force
 ```
 
 See the currently installed/enabled components:
-```ps
+```powershell
 Get-WindowsPackage -Path $mountpath
 Get-WindowsOptionalFeature -Path $mountpath
 Get-WindowsCapability -Path $mountpath
 ```
 Removing packages:
-```ps
+```powershell
 # Examples
 $packages = @(
   "Microsoft-Windows-Hello-Face-Package*",
@@ -174,7 +165,7 @@ $packages = @(
 foreach ($p in $packages) { Get-WindowsPackage -Path $mountpath | ? { $_.PackageName -like $p -and $_.State -eq 'Installed' } | % { Remove-WindowsPackage -Path $mountpath -PackageName $_.PackageName } }
 ```
 Disabling optional features:
-```ps
+```powershell
 # Examples
 $featuredisable = @(
     "MicrosoftWindowsPowerShellV2Root",
@@ -197,8 +188,50 @@ $featureenable = @(
 
 foreach ($f in $featureenable) { Enable-WindowsOptionalFeature -Path $mountpath -FeatureName $f -All }
 ```
+Removing AppX packages:
+```powershell
+$appx = @(
+  "Clipchamp.Clipchamp",
+  "Microsoft.549981C3F5F10",
+  "Microsoft.BingNews",
+  "Microsoft.BingWeather",
+  "Microsoft.DesktopAppInstaller",
+  "Microsoft.GamingApp",
+  "Microsoft.GetHelp",
+  "Microsoft.Getstarted",
+  "Microsoft.MicrosoftOfficeHub",
+  "Microsoft.MicrosoftSolitaireCollection",
+  "Microsoft.MicrosoftStickyNotes",
+  "Microsoft.Paint",
+  "Microsoft.People",
+  "Microsoft.PowerAutomateDesktop",
+  "Microsoft.ScreenSketch",
+  "Microsoft.Windows.Photos",
+  "Microsoft.WindowsAlarms",
+  "Microsoft.WindowsCalculator",
+  "Microsoft.WindowsCamera",
+  "microsoft.windowscommunicationsapps",
+  "Microsoft.WindowsFeedbackHub",
+  "Microsoft.WindowsMaps",
+  "Microsoft.WindowsNotepad",
+  "Microsoft.WindowsSoundRecorder",
+  "Microsoft.Xbox.TCUI",
+  "Microsoft.XboxGameOverlay",
+  "Microsoft.XboxGamingOverlay",
+  "Microsoft.XboxIdentityProvider",
+  "Microsoft.XboxSpeechToTextOverlay",
+  "Microsoft.YourPhone",
+  "Microsoft.ZuneMusic",
+  "Microsoft.ZuneVideo",
+  "MicrosoftCorporationII.QuickAssist",
+  "MicrosoftWindows.Client.WebExperience"
+)
+
+foreach ($n in $appx) { Get-AppxProvisionedAppxPackage -Path $mountpath | ? { $_.DisplayName -eq $n } | % { Remove-AppxProvisionedAppxPackage -Path $mountpath -PackageName $_.PackageName } }
+```
+
 Removing capabilities:
-```ps
+```powershell
 # Examples
 $capability = @(
     "App.StepsRecorder*",
@@ -217,20 +250,20 @@ $capability = @(
 foreach ($c in $capability) { Get-WindowsCapability -Path $mountpath | ? { $_.Name -like $c } | % { Remove-WindowsCapability -Path $mountpath -Name $_.Name } }
 ```
 Adding drivers:
-```ps
+```powershell
 # '$home\Desktop\Driver' should include the driver files
 Add-WindowsDriver -Path "$home\Desktop\Mount" -Driver "$home\Desktop\Driver" -Recurse -ForceUnsigned
 ```
 Moving your post install folder & `autounattend.xml`:
-```ps
+```powershell
 Copy-Item "C:\Installation" -Destination $mountpath -Recurse -Force
 Copy-Item "C:\Installation\Folders\Image\autounattend.xml" -Destination "$home\Desktop\Stock" -Force
 ```
 Saving the changes & dismounting the image:
-```ps
+```powershell
 Dismount-WindowsImage -Path "$home\Desktop\Mount" -Save
 ```
-```ps
+```powershell
 & "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe" -m -o -u2 -udfver102 -l"Enterprise" -bootdata:1#pEF,e,b"$home\Desktop\Stock\efi\microsoft\boot\efisys.bin" "$home\Desktop\Stock" "$home\Desktop\Enterprise.iso"
 ```
 
